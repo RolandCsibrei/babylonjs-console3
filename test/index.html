@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://code.jquery.com/pep/0.4.3/pep.js"></script>
+    <script src="/src/console3-playground.js"></script>
+    <style>
+      html,
+      body {
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="renderCanvas" touch-action="none"></canvas>
+    <!-- touch-action="none" for best results from PEP -->
+
+    <script>
+      var c3 = window.console3;
+      window.onload = () => {
+        const canvas = document.getElementById("renderCanvas"); // Get the canvas element
+        const engine = new BABYLON.Engine(canvas, true); // Generate the BABYLON 3D engine
+
+        const scene = createScene(engine, canvas); //Call the createScene function
+
+        engine.runRenderLoop(function () {
+          scene.render();
+        });
+
+        window.addEventListener("resize", function () {
+          engine.resize();
+        });
+      };
+      var createScene = function (engine, canvas) {
+        var scene = new BABYLON.Scene(engine);
+
+        c3.create(engine, scene, {
+          observerPanelWidthInPixels: 150,
+        });
+        c3.log("Instance created");
+        c3.log(engine.getRenderHeight(true));
+
+        var camera = new BABYLON.FreeCamera(
+          "camera1",
+          new BABYLON.Vector3(0, 5, -10),
+          scene
+        );
+        camera.setTarget(BABYLON.Vector3.Zero());
+        camera.attachControl(canvas, true);
+        var light = new BABYLON.HemisphericLight(
+          "light",
+          new BABYLON.Vector3(0, 1, 0),
+          scene
+        );
+        light.intensity = 0.7;
+
+        var sphere = BABYLON.MeshBuilder.CreateSphere(
+          "sphere",
+          { diameter: 2, segments: 32 },
+          scene
+        );
+        sphere.position.y = 1;
+
+        var ground = BABYLON.MeshBuilder.CreateGround(
+          "ground",
+          { width: 6, height: 6 },
+          scene
+        );
+
+        c3.log("Ball");
+
+        c3.logf("Ball tracking", sphere);
+
+        c3.logd("Ball position", sphere.position);
+        scene.onBeforeRenderObservable.add(() => {
+          sphere.position.z += 0.01 * scene.getAnimationRatio();
+          if (c3.getTicks() % 50 === 0) {
+            c3.log(
+              `Ticks: ${c3.getTicks()}, Millis: ${c3.getTimeFormatted()} `
+            );
+          }
+        });
+
+        return scene;
+      };
+    </script>
+  </body>
+</html>
