@@ -58,7 +58,7 @@ var Console3LoggedEntity = /** @class */ (function () {
         this.textInputs = [];
         this.refreshRate = 1;
         this.ticks = 0;
-        this.seconds = 0;
+        this.millis = 0;
     }
     Console3LoggedEntity.prototype.getObject = function () {
         if (this.property) {
@@ -180,9 +180,8 @@ var console3 = /** @class */ (function () {
         var _a;
         return Date.now() - ((_a = console3.instance) === null || _a === void 0 ? void 0 : _a._timeSpawned);
     };
-    console3.getTimeFormatted = function () {
-        debugger;
-        var t = console3.getTime();
+    console3.getTimeFormatted = function (time) {
+        var t = time !== null && time !== void 0 ? time : console3.getTime();
         var t1000 = t / 1000;
         var millis = t1000 - Math.floor(t1000);
         var secs = Math.floor(t1000);
@@ -524,7 +523,6 @@ var console3 = /** @class */ (function () {
             });
         }
         else {
-            console.warn("console3: entity", name, "already exists.");
             entity.source = object;
             entity.property = property;
             entity.options.docked = docked;
@@ -630,7 +628,11 @@ var console3 = /** @class */ (function () {
                 if (lineControl) {
                     var entity = this._consoleEntities[linesCount - i - 1];
                     lineControl.text =
-                        entity.ticks.toString() + " | " + entity.getObject();
+                        entity.ticks.toString() +
+                            " | " +
+                            console3.getTimeFormatted() +
+                            " : " +
+                            entity.getObject();
                 }
             }
             if (drawCount < this._options.maxConsoleEntities) {

@@ -94,7 +94,7 @@ class Console3LoggedEntity {
   public highliteWhen?: (value: any) => boolean;
   public refreshRate = 1;
   public ticks = 0;
-  public seconds = 0;
+  public millis = 0;
 
   public getObject<T>() {
     if (this.property) {
@@ -187,9 +187,8 @@ class console3 {
     return Date.now() - console3.instance?._timeSpawned;
   }
 
-  public static getTimeFormatted() {
-    debugger;
-    const t = console3.getTime();
+  public static getTimeFormatted(time?: number) {
+    const t = time ?? console3.getTime();
     const t1000 = t / 1000;
     const millis = t1000 - Math.floor(t1000);
     const secs = Math.floor(t1000);
@@ -672,7 +671,6 @@ class console3 {
         console: false,
       });
     } else {
-      console.warn("console3: entity", name, "already exists.");
       entity.source = object;
       entity.property = property;
       entity.options.docked = docked;
@@ -798,7 +796,11 @@ class console3 {
         if (lineControl) {
           const entity = this._consoleEntities[linesCount - i - 1];
           lineControl.text =
-            entity.ticks.toString() + " | " + entity.getObject();
+            entity.ticks.toString() +
+            " | " +
+            console3.getTimeFormatted() +
+            " : " +
+            entity.getObject();
         }
       }
 
