@@ -28,9 +28,9 @@ var DefaultConsole3Options = {
     consolePanelAlpha: 0.4,
     mainPanelAlpha: 0.4,
     linesAlpha: 0.4,
-    maxConsoleEntities: 10,
-    consoleLineHeightInPixels: 16,
-    consolePanelHeightInPixels: 10 * 16
+    maxConsoleLineEntities: 10,
+    consoleLineHeightInPixels: 12,
+    consolePanelHeightInPixels: 10 * 12
 };
 var Console3LoggedEntityType;
 (function (Console3LoggedEntityType) {
@@ -42,12 +42,18 @@ var Console3LoggedEntityType;
     Console3LoggedEntityType[Console3LoggedEntityType["Vector3"] = 5] = "Vector3";
     Console3LoggedEntityType[Console3LoggedEntityType["Color3"] = 6] = "Color3";
     Console3LoggedEntityType[Console3LoggedEntityType["Color4"] = 7] = "Color4";
+    Console3LoggedEntityType[Console3LoggedEntityType["Vector3Array"] = 8] = "Vector3Array";
 })(Console3LoggedEntityType || (Console3LoggedEntityType = {}));
 var Side;
 (function (Side) {
     Side[Side["Left"] = 0] = "Left";
     Side[Side["Right"] = 1] = "Right";
 })(Side || (Side = {}));
+var SharedMaterials;
+(function (SharedMaterials) {
+    SharedMaterials[SharedMaterials["Vector3ArrayLine"] = 0] = "Vector3ArrayLine";
+    SharedMaterials[SharedMaterials["Vector3ArrayMarker"] = 1] = "Vector3ArrayMarker";
+})(SharedMaterials || (SharedMaterials = {}));
 var Console3LoggedEntity = /** @class */ (function () {
     function Console3LoggedEntity(name, type, source, property, options) {
         this.name = name;
@@ -89,24 +95,29 @@ var console3 = /** @class */ (function () {
         this._entities = new Map();
         this._consoleEntities = [];
         this._consoleLineControls = [];
+        this._consolePaused = false;
         this._consoleVisible = true;
         this._consoleLinesVisible = true;
         this._entityTypeMappings = new Map();
         this._side = Side.Right;
         this._ticks = 0;
         this._timeSpawned = 0;
+        this._sharedMaterials = new Map();
         this._timeSpawned = Date.now();
         this._gui =
             (_a = this._gui) !== null && _a !== void 0 ? _a : BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("Console3UI", true, this._scene);
         this._options = options
             ? __assign(__assign({}, DefaultConsole3Options), options) : __assign({}, DefaultConsole3Options);
+        this._createSharedMaterials();
         this._createMappings();
         this._createMainPanel();
         this._createConsolePanel();
         this._createButtons();
         this._scene.onBeforeRenderObservable.add(function () {
-            _this._draw();
-            _this._offsetInPixelsIfSceneExplorer();
+            if (!_this._consolePaused) {
+                _this._draw();
+            }
+            // this._offsetInPixelsIfSceneExplorer();
         });
     }
     console3.create = function (engine, scene, options, gui) {
@@ -120,6 +131,11 @@ var console3 = /** @class */ (function () {
         if (property === void 0) { property = ""; }
         var name = "default";
         return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._log0(name, object, property, 1);
+    };
+    console3.logv = function (name, vectors, property) {
+        var _a;
+        if (property === void 0) { property = ""; }
+        return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._logv(name, vectors, property, 1);
     };
     console3.logd = function (name, object, property) {
         var _a;
@@ -197,6 +213,23 @@ var console3 = /** @class */ (function () {
             millisLabel;
         return timeFormatted;
     };
+    console3.prototype._createSharedMaterials = function () {
+        var matVectorArrayLine = new BABYLON.StandardMaterial("console3-shared-material-vector3-array-line", this._scene);
+        matVectorArrayLine.emissiveColor = new BABYLON.Color3(0, 0.4, 0);
+        matVectorArrayLine.alpha = 0.4;
+        this._setSharedMaterial(SharedMaterials.Vector3ArrayLine, matVectorArrayLine);
+        var matVectorArrayMarker = new BABYLON.StandardMaterial("console3-shared-material-vector3-array-marker", this._scene);
+        matVectorArrayMarker.emissiveColor = new BABYLON.Color3(0.4, 0, 0);
+        matVectorArrayMarker.alpha = 0.4;
+        this._setSharedMaterial(SharedMaterials.Vector3ArrayMarker, matVectorArrayMarker);
+    };
+    console3.prototype._setSharedMaterial = function (materialKey, material) {
+        this._sharedMaterials.set(materialKey, material);
+    };
+    console3.prototype._getSharedMaterial = function (materialKey) {
+        var _a;
+        return (_a = this._sharedMaterials.get(materialKey)) !== null && _a !== void 0 ? _a : null;
+    };
     console3.prototype._createMappings = function () {
         var _this = this;
         var entityTypeMappings = new Map();
@@ -231,6 +264,10 @@ var console3 = /** @class */ (function () {
         entityTypeMappings.set(Console3LoggedEntityType.Color4, {
             color: new BABYLON.Color3(0.0, 0.0, 0.0),
             drawFunction: function (entity) { return _this._drawColor4(entity); }
+        });
+        entityTypeMappings.set(Console3LoggedEntityType.Vector3Array, {
+            color: new BABYLON.Color3(0.0, 0.0, 0.0),
+            drawFunction: function (entity) { return _this._drawVector3Array(entity); }
         });
         this._entityTypeMappings = entityTypeMappings;
     };
@@ -272,6 +309,24 @@ var console3 = /** @class */ (function () {
             var obj = console3._getObject(entity);
             entity.textInputs[0].text = obj.x.toFixed(this._options.floatPrecision) + ", " + obj.y.toFixed(this._options.floatPrecision) + ", " + obj.z.toFixed(this._options.floatPrecision);
         }
+    };
+    console3.prototype._drawVector3Array = function (entity) {
+        var _this = this;
+        // TODO: create object pool
+        var markers = this._scene.meshes.filter(function (m) { return m.name.indexOf("console3-vector-array-marker") > -1; });
+        markers.forEach(function (m) {
+            m.dispose();
+        });
+        var vectors = console3._getObject(entity);
+        // tubes
+        var tube = BABYLON.MeshBuilder.CreateTube("console3-vector-array-marker", { path: vectors, radius: 0.01, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, this._scene);
+        tube.material = this._getSharedMaterial(SharedMaterials.Vector3ArrayLine);
+        // marker points
+        vectors.forEach(function (v, idx) {
+            var arrayVectorMarker = BABYLON.Mesh.CreateSphere("console3-vector-array-marker-" + idx, 8, 0.08, _this._scene);
+            arrayVectorMarker.position = v;
+            arrayVectorMarker.material = _this._getSharedMaterial(SharedMaterials.Vector3ArrayMarker);
+        });
     };
     console3.prototype._drawColor3 = function (entity) {
         if (entity.textInputs) {
@@ -353,10 +408,11 @@ var console3 = /** @class */ (function () {
         buttonPanel.heightInPixels = 40;
         this._buttonPanel = buttonPanel;
         this._mainPanel.addControl(buttonPanel);
-        this._createSideToggleButton(buttonPanel);
+        // this._createSideToggleButton(buttonPanel);
         this._createInspectorButton(buttonPanel);
         this._createConsoleLinesToggleButton(buttonPanel);
         this._createConsoleToggleButton(buttonPanel);
+        this._createPauseButton(buttonPanel);
     };
     console3.prototype._createInspectorButton = function (parent) {
         var _this = this;
@@ -376,7 +432,7 @@ var console3 = /** @class */ (function () {
             else {
                 void _this._scene.debugLayer.show({
                     embedMode: false,
-                    overlay: true
+                    overlay: false
                 });
             }
             // this._BABYLON.scene.debugLayer.select();
@@ -405,8 +461,22 @@ var console3 = /** @class */ (function () {
         btn.color = "white";
         btn.fontSize = 12;
         btn.background = "#666";
+        btn.paddingRightInPixels = 4;
         btn.onPointerUpObservable.add(function () {
             _this._consoleVisible = !_this._consoleVisible;
+        });
+        parent.addControl(btn);
+    };
+    console3.prototype._createPauseButton = function (parent) {
+        var _this = this;
+        var btn = BABYLON.GUI.Button.CreateSimpleButton("console3-button-console-pause", "P");
+        btn.widthInPixels = 28;
+        btn.heightInPixels = 24;
+        btn.color = "white";
+        btn.fontSize = 12;
+        btn.background = "#844";
+        btn.onPointerUpObservable.add(function () {
+            _this._consolePaused = !_this._consolePaused;
         });
         parent.addControl(btn);
     };
@@ -467,15 +537,24 @@ var console3 = /** @class */ (function () {
         var value = property !== "" ? object[property] : object;
         var objType = typeof value;
         if (objType === "object") {
-            if (value instanceof BABYLON.Vector3) {
-                type = Console3LoggedEntityType.Vector3;
+            if (Array.isArray(value)) {
+                if (value.length > 0) {
+                    if (value[0] instanceof BABYLON.Vector3) {
+                        type = Console3LoggedEntityType.Vector3Array;
+                    }
+                }
             }
-            else if (value instanceof BABYLON.Color3) {
-                type = Console3LoggedEntityType.Color3;
-            }
-            else if (value instanceof BABYLON.AbstractMesh) {
-                type = Console3LoggedEntityType.Mesh;
-                inputCount = 3;
+            else {
+                if (value instanceof BABYLON.Vector3) {
+                    type = Console3LoggedEntityType.Vector3;
+                }
+                else if (value instanceof BABYLON.Color3) {
+                    type = Console3LoggedEntityType.Color3;
+                }
+                else if (value instanceof BABYLON.AbstractMesh) {
+                    type = Console3LoggedEntityType.Mesh;
+                    inputCount = 3;
+                }
             }
         }
         else if (objType === "string") {
@@ -510,6 +589,23 @@ var console3 = /** @class */ (function () {
             docked: docked,
             console: true
         });
+        entity.refreshRate = refreshRate;
+        return entity;
+    };
+    console3.prototype._logv = function (name, object, property, refreshRate) {
+        var docked = false;
+        var entity = this._entities.get(name);
+        if (!entity) {
+            entity = this._addObjectEntity(name, object, property, {
+                docked: docked,
+                console: false
+            });
+        }
+        else {
+            entity.source = object;
+            entity.property = property;
+            entity.options.docked = docked;
+        }
         entity.refreshRate = refreshRate;
         return entity;
     };
@@ -551,7 +647,7 @@ var console3 = /** @class */ (function () {
     };
     console3.prototype._setColorEntityColor = function (key, color) {
         var existingControls = this._gui.getDescendants();
-        var control = existingControls.find(function (c) { return c.name === "console3-panel-" + key; });
+        var control = existingControls.find(function (c) { return c.name === "console3-observer-panel-" + key; });
         if (control instanceof BABYLON.GUI.StackPanel) {
             control.background = "rgb(" + color.r * 255 + "," + color.g * 255 + "," + color.b * 255 + ")";
         }
@@ -624,25 +720,25 @@ var console3 = /** @class */ (function () {
                 this._scrollViewer.isVisible = true;
             }
             for (var i = 0; i < drawCount; i++) {
-                var lineControl = this._consoleLineControls[this._options.maxConsoleEntities - 1 - i];
+                var lineControl = this._consoleLineControls[this._options.maxConsoleLineEntities - 1 - i];
                 if (lineControl) {
                     var entity = this._consoleEntities[linesCount - i - 1];
                     lineControl.text =
                         entity.ticks.toString() +
-                            " | " +
-                            console3.getTimeFormatted() +
+                            // " | " +
+                            // console3.getTimeFormatted() +
                             " : " +
                             entity.getObject();
                 }
             }
-            if (drawCount < this._options.maxConsoleEntities) {
+            if (drawCount < this._options.maxConsoleLineEntities) {
                 this._scrollViewer.verticalBar.value = 1;
             }
         }
     };
     console3.prototype._createConsoleLines = function (consolePanel) {
         if (this._gui) {
-            for (var i = 0; i < this._options.maxConsoleEntities; i++) {
+            for (var i = 0; i < this._options.maxConsoleLineEntities; i++) {
                 var textValue = new BABYLON.GUI.InputText();
                 textValue.width = 1;
                 textValue.heightInPixels = this._options.consoleLineHeightInPixels;
@@ -659,7 +755,7 @@ var console3 = /** @class */ (function () {
         }
     };
     console3.prototype._addConsoleLine = function (entity) {
-        if (this._consoleEntities.length >= this._options.maxConsoleEntities) {
+        if (this._consoleEntities.length >= this._options.maxConsoleLineEntities) {
             this._consoleEntities.shift();
         }
         this._consoleEntities.push(entity);

@@ -35,7 +35,7 @@ interface Console3Options {
   consolePanelAlpha: number;
   mainPanelAlpha: number;
   linesAlpha: number;
-  maxConsoleEntities: number;
+  maxConsoleLineEntities: number;
   consoleLineHeightInPixels: number;
   consolePanelHeightInPixels: number;
 }
@@ -53,9 +53,9 @@ const DefaultConsole3Options: Console3Options = {
   consolePanelAlpha: 0.4,
   mainPanelAlpha: 0.4,
   linesAlpha: 0.4,
-  maxConsoleEntities: 10,
-  consoleLineHeightInPixels: 16,
-  consolePanelHeightInPixels: 10 * 16,
+  maxConsoleLineEntities: 10,
+  consoleLineHeightInPixels: 12,
+  consolePanelHeightInPixels: 10 * 12,
 };
 
 enum Console3LoggedEntityType {
@@ -67,11 +67,17 @@ enum Console3LoggedEntityType {
   Vector3,
   Color3,
   Color4,
+  Vector3Array,
 }
 
 enum Side {
   Left,
   Right,
+}
+
+enum SharedMaterials {
+  Vector3ArrayLine,
+  Vector3ArrayMarker,
 }
 
 interface Console3LoggedEntityTypeMapping {
@@ -146,6 +152,10 @@ class console3 {
     return console3.instance?._log0(name, object, property, 1);
   }
 
+  public static logv(name: string, vectors: BABYLON.Vector3[], property = "") {
+    return console3.instance?._logv(name, vectors, property, 1);
+  }
+
   public static logd(name: string, object: any, property = "") {
     return console3.instance?._logd(name, object, property, 1);
   }
@@ -212,6 +222,7 @@ class console3 {
 
   private _consoleEntities: Console3LoggedEntity[] = [];
   private _consoleLineControls: BABYLON_GUI.InputText[] = [];
+  private _consolePaused = false;
   private _consoleVisible = true;
   private _consoleLinesVisible = true;
 
@@ -233,6 +244,8 @@ class console3 {
   private _timeSpawned = 0;
   private _options: Console3Options;
 
+  private _sharedMaterials = new Map<SharedMaterials, BABYLON.Material>();
+
   constructor(
     private _engine: BABYLON.Engine,
     private _scene: BABYLON.Scene,
@@ -253,6 +266,7 @@ class console3 {
       ? { ...DefaultConsole3Options, ...options }
       : { ...DefaultConsole3Options };
 
+    this._createSharedMaterials();
     this._createMappings();
     this._createMainPanel();
     this._createConsolePanel();
@@ -260,9 +274,46 @@ class console3 {
     this._createButtons();
 
     this._scene.onBeforeRenderObservable.add(() => {
-      this._draw();
-      this._offsetInPixelsIfSceneExplorer();
+      if (!this._consolePaused) {
+        this._draw();
+      }
+      // this._offsetInPixelsIfSceneExplorer();
     });
+  }
+
+  private _createSharedMaterials() {
+    const matVectorArrayLine = new BABYLON.StandardMaterial(
+      "console3-shared-material-vector3-array-line",
+      this._scene
+    );
+    matVectorArrayLine.emissiveColor = new BABYLON.Color3(0, 0.4, 0);
+    matVectorArrayLine.alpha = 0.4;
+    this._setSharedMaterial(
+      SharedMaterials.Vector3ArrayLine,
+      matVectorArrayLine
+    );
+
+    const matVectorArrayMarker = new BABYLON.StandardMaterial(
+      "console3-shared-material-vector3-array-marker",
+      this._scene
+    );
+    matVectorArrayMarker.emissiveColor = new BABYLON.Color3(0.4, 0, 0);
+    matVectorArrayMarker.alpha = 0.4;
+    this._setSharedMaterial(
+      SharedMaterials.Vector3ArrayMarker,
+      matVectorArrayMarker
+    );
+  }
+
+  private _setSharedMaterial(
+    materialKey: SharedMaterials,
+    material: BABYLON.Material
+  ) {
+    this._sharedMaterials.set(materialKey, material);
+  }
+
+  private _getSharedMaterial(materialKey: SharedMaterials) {
+    return this._sharedMaterials.get(materialKey) ?? null;
   }
 
   private _createMappings() {
@@ -302,6 +353,10 @@ class console3 {
     entityTypeMappings.set(Console3LoggedEntityType.Color4, {
       color: new BABYLON.Color3(0.0, 0.0, 0.0),
       drawFunction: (entity) => this._drawColor4(entity),
+    });
+    entityTypeMappings.set(Console3LoggedEntityType.Vector3Array, {
+      color: new BABYLON.Color3(0.0, 0.0, 0.0),
+      drawFunction: (entity) => this._drawVector3Array(entity),
     });
     this._entityTypeMappings = entityTypeMappings;
   }
@@ -367,6 +422,40 @@ class console3 {
         this._options.floatPrecision
       )}`;
     }
+  }
+
+  private _drawVector3Array(entity: Console3LoggedEntity) {
+    // TODO: create object pool
+    const markers = this._scene.meshes.filter(
+      (m) => m.name.indexOf("console3-vector-array-marker") > -1
+    );
+    markers.forEach((m) => {
+      m.dispose();
+    });
+
+    const vectors = console3._getObject<BABYLON.Vector3[]>(entity);
+
+    // tubes
+    const tube = BABYLON.MeshBuilder.CreateTube(
+      `console3-vector-array-marker`,
+      { path: vectors, radius: 0.01, sideOrientation: BABYLON.Mesh.DOUBLESIDE },
+      this._scene
+    );
+    tube.material = this._getSharedMaterial(SharedMaterials.Vector3ArrayLine);
+
+    // marker points
+    vectors.forEach((v, idx) => {
+      const arrayVectorMarker = BABYLON.Mesh.CreateSphere(
+        `console3-vector-array-marker-${idx}`,
+        8,
+        0.08,
+        this._scene
+      );
+      arrayVectorMarker.position = v;
+      arrayVectorMarker.material = this._getSharedMaterial(
+        SharedMaterials.Vector3ArrayMarker
+      );
+    });
   }
 
   private _drawColor3(entity: Console3LoggedEntity) {
@@ -470,10 +559,11 @@ class console3 {
     this._buttonPanel = buttonPanel;
     this._mainPanel.addControl(buttonPanel);
 
-    this._createSideToggleButton(buttonPanel);
+    // this._createSideToggleButton(buttonPanel);
     this._createInspectorButton(buttonPanel);
     this._createConsoleLinesToggleButton(buttonPanel);
     this._createConsoleToggleButton(buttonPanel);
+    this._createPauseButton(buttonPanel);
   }
 
   private _createInspectorButton(parent: BABYLON_GUI.StackPanel) {
@@ -496,7 +586,7 @@ class console3 {
       } else {
         void this._scene.debugLayer.show({
           embedMode: false,
-          overlay: true,
+          overlay: false,
         });
       }
       // this._BABYLON.scene.debugLayer.select();
@@ -531,8 +621,25 @@ class console3 {
     btn.color = "white";
     btn.fontSize = 12;
     btn.background = "#666";
+    btn.paddingRightInPixels = 4;
     btn.onPointerUpObservable.add(() => {
       this._consoleVisible = !this._consoleVisible;
+    });
+    parent.addControl(btn);
+  }
+
+  private _createPauseButton(parent: BABYLON_GUI.StackPanel) {
+    const btn = BABYLON_GUI.Button.CreateSimpleButton(
+      "console3-button-console-pause",
+      "P"
+    );
+    btn.widthInPixels = 28;
+    btn.heightInPixels = 24;
+    btn.color = "white";
+    btn.fontSize = 12;
+    btn.background = "#844";
+    btn.onPointerUpObservable.add(() => {
+      this._consolePaused = !this._consolePaused;
     });
     parent.addControl(btn);
   }
@@ -601,13 +708,21 @@ class console3 {
     const value = property !== "" ? object[property] : object;
     const objType = typeof value;
     if (objType === "object") {
-      if (value instanceof BABYLON.Vector3) {
-        type = Console3LoggedEntityType.Vector3;
-      } else if (value instanceof BABYLON.Color3) {
-        type = Console3LoggedEntityType.Color3;
-      } else if (value instanceof BABYLON.AbstractMesh) {
-        type = Console3LoggedEntityType.Mesh;
-        inputCount = 3;
+      if (Array.isArray(value)) {
+        if (value.length > 0) {
+          if (value[0] instanceof BABYLON.Vector3) {
+            type = Console3LoggedEntityType.Vector3Array;
+          }
+        }
+      } else {
+        if (value instanceof BABYLON.Vector3) {
+          type = Console3LoggedEntityType.Vector3;
+        } else if (value instanceof BABYLON.Color3) {
+          type = Console3LoggedEntityType.Color3;
+        } else if (value instanceof BABYLON.AbstractMesh) {
+          type = Console3LoggedEntityType.Mesh;
+          inputCount = 3;
+        }
       }
     } else if (objType === "string") {
       type = Console3LoggedEntityType.Text;
@@ -653,6 +768,28 @@ class console3 {
       docked,
       console: true,
     });
+    entity.refreshRate = refreshRate;
+    return entity;
+  }
+
+  private _logv(
+    name: string,
+    object: any,
+    property: string,
+    refreshRate: number
+  ) {
+    const docked = false;
+    let entity = this._entities.get(name);
+    if (!entity) {
+      entity = this._addObjectEntity(name, object, property, {
+        docked,
+        console: false,
+      });
+    } else {
+      entity.source = object;
+      entity.property = property;
+      entity.options.docked = docked;
+    }
     entity.refreshRate = refreshRate;
     return entity;
   }
@@ -710,7 +847,7 @@ class console3 {
   ) {
     const existingControls = this._gui!.getDescendants();
     const control = existingControls.find(
-      (c) => c.name === `console3-panel-${key}`
+      (c) => c.name === `console3-observer-panel-${key}`
     );
     if (control instanceof BABYLON_GUI.StackPanel) {
       control.background = `rgb(${color.r * 255},${color.g * 255},${
@@ -733,9 +870,10 @@ class console3 {
 
     this._showConsole();
     this._showConsoleLines();
-    this._drawEntites();
 
+    this._drawEntites();
     this._drawConsoleLines();
+
     this._ticks++;
   }
 
@@ -792,19 +930,21 @@ class console3 {
       }
       for (let i = 0; i < drawCount; i++) {
         const lineControl =
-          this._consoleLineControls[this._options.maxConsoleEntities - 1 - i];
+          this._consoleLineControls[
+            this._options.maxConsoleLineEntities - 1 - i
+          ];
         if (lineControl) {
           const entity = this._consoleEntities[linesCount - i - 1];
           lineControl.text =
             entity.ticks.toString() +
-            " | " +
-            console3.getTimeFormatted() +
+            // " | " +
+            // console3.getTimeFormatted() +
             " : " +
             entity.getObject();
         }
       }
 
-      if (drawCount < this._options.maxConsoleEntities) {
+      if (drawCount < this._options.maxConsoleLineEntities) {
         this._scrollViewer.verticalBar.value = 1;
       }
     }
@@ -812,7 +952,7 @@ class console3 {
 
   private _createConsoleLines(consolePanel: BABYLON_GUI.StackPanel) {
     if (this._gui) {
-      for (let i = 0; i < this._options.maxConsoleEntities; i++) {
+      for (let i = 0; i < this._options.maxConsoleLineEntities; i++) {
         const textValue = new BABYLON_GUI.InputText();
         textValue.width = 1;
         textValue.heightInPixels = this._options.consoleLineHeightInPixels;
@@ -831,7 +971,7 @@ class console3 {
   }
 
   private _addConsoleLine(entity: Console3LoggedEntity) {
-    if (this._consoleEntities.length >= this._options.maxConsoleEntities) {
+    if (this._consoleEntities.length >= this._options.maxConsoleLineEntities) {
       this._consoleEntities.shift();
     }
     this._consoleEntities.push(entity);

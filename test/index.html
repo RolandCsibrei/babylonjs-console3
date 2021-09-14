@@ -77,6 +77,10 @@
           scene
         );
         sphere.position.y = 1;
+        const mat = new BABYLON.StandardMaterial("sphereMat", scene);
+        const color = new BABYLON.Color3(1, 0, 0);
+        mat.emissiveColor = color;
+        sphere.material = mat;
 
         var ground = BABYLON.MeshBuilder.CreateGround(
           "ground",
@@ -84,18 +88,40 @@
           scene
         );
 
-        c3.log("Ball");
+        c3.logd("Sphere color #1", color); // works once
+        c3.logd("Sphere color #2", mat.emissiveColor); // works once
+        c3.logd("Sphere color #3", mat, "emissiveColor"); // works every frame
 
-        c3.logf("Ball tracking", sphere);
+        c3.logd("Camera position", camera.position);
+
+        c3.logf("Tracking the sphere", sphere); // creates a floating tracker
+        c3.logf("Tracking the ground", ground); // creates a floating tracker
 
         c3.logd("Ball position", sphere.position);
         scene.onBeforeRenderObservable.add(() => {
-          sphere.position.z += 0.01 * scene.getAnimationRatio();
+          // this will be replaced by c3.log(msg: string, options: { refreshRate: number, etc...})
           if (c3.getTicks() % 50 === 0) {
             c3.log(
-              `Ticks: ${c3.getTicks()}, Millis: ${c3.getTimeFormatted()} `
+              `Ticks: ${c3.getTicks()}, Millis: ${c3.getTime()} Formatted: ${c3.getTimeFormatted()} `
             );
+            mat.emissiveColor = BABYLON.Color3.Random();
           }
+
+          c3.logd("Sphere Z", sphere.position.z.toString()); // refresh primitive value manually
+
+          sphere.position.z += 0.01 * scene.getAnimationRatio();
+          ground.rotation.y += 0.01 * scene.getAnimationRatio();
+
+          const vectors = [
+            new BABYLON.Vector3(Math.sin(c3.getTicks() / 1000), 0, 0),
+            sphere.position,
+            new BABYLON.Vector3(Math.cos(c3.getTicks() / 1000), 2, 0),
+            new BABYLON.Vector3(Math.sin(c3.getTicks() / 1000), 3, 4),
+          ];
+
+          c3.logv("Vector tracking", vectors);
+          // c3.logf("Tracking Vector 1", vectors[0]);
+          // c3.logf("Tracking Vector 2", vectors[0]);
         });
 
         return scene;
