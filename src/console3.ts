@@ -89,6 +89,7 @@ interface Console3LoggedEntityTypeMapping {
 interface Console3LoggedEntityOption {
   docked?: boolean;
   linkedWithMesh?: boolean;
+  linkedWithVector?: boolean;
   console?: boolean;
   mapping?: Console3LoggedEntityTypeMapping;
   widthInPixels?: number;
@@ -175,18 +176,6 @@ class console3 {
   // floating
   public static logf(name: string, object: any, property = "") {
     return console3.instance?._logf(name, object, property, 1);
-  }
-  public static logf5(name: string, object: any, property = "") {
-    return console3.instance?._logf(name, object, property, 5);
-  }
-  public static logf30(name: string, object: any, property = "") {
-    return console3.instance?._logf(name, object, property, 30);
-  }
-  public static logf60(name: string, object: any, property = "") {
-    return console3.instance?._logf(name, object, property, 60);
-  }
-  public static logf120(name: string, object: any, property = "") {
-    return console3.instance?._logf(name, object, property, 120);
   }
 
   public static getTicks() {
@@ -829,6 +818,33 @@ class console3 {
         docked,
         console: false,
         linkedWithMesh: true,
+        linkedWithVector: false,
+      });
+    } else {
+      console.warn("console3: entity", name, "already exists.");
+      entity.source = object;
+      entity.property = property;
+      entity.options.docked = docked;
+    }
+    entity.refreshRate = refreshRate;
+
+    return entity;
+  }
+
+  private _logvf(
+    name: string,
+    object: any,
+    property: string,
+    refreshRate: number
+  ) {
+    const docked = false;
+    let entity = this._entities.get(name);
+    if (!entity) {
+      entity = this._addObjectEntity(name, object, property, {
+        docked,
+        console: false,
+        linkedWithMesh: false,
+        linkedWithVector: true,
       });
     } else {
       console.warn("console3: entity", name, "already exists.");
@@ -994,16 +1010,11 @@ class console3 {
       parentPanel.zIndex = 1;
       parentPanel.alpha = this._options.mainPanelAlpha;
 
-      if (entity.options.linkedWithMesh === true) {
+      if (
+        entity.options.linkedWithMesh === true ||
+        entity.options.linkedWithVector === true
+      ) {
         this._gui.addControl(parentPanel);
-
-        const mesh = entity.getLinkedMesh();
-        if (mesh) {
-          parentPanel.linkWithMesh(mesh);
-          entity.options.linkedWithMesh = true;
-        }
-
-        parentPanel.paddingTopInPixels = 0;
 
         const line = new BABYLON_GUI.Line(`line-${entity.name}`);
         line.lineWidth = 2;
@@ -1013,9 +1024,25 @@ class console3 {
         line.zIndex = 0;
         line.linkOffsetY = -20;
         line.alpha = this._options.linesAlpha;
-        this._gui.addControl(line);
-        line.linkWithMesh(mesh);
         line.connectedControl = parentPanel;
+
+        this._gui.addControl(line);
+
+
+        if (entity.options.linkedWithMesh === true) {
+          const mesh = entity.getLinkedMesh();
+          if (mesh) {
+            parentPanel.linkWithMesh(mesh);
+            line.linkWithMesh(mesh);
+          }
+        }
+
+        if (entity.options.linkedWithVector === true) {
+          const vector = entity.getObject<BABYLON.Vector3>();
+          parentPanel.moveToVector3(vector, this._scene);
+          line.moveToVector3(vector, this._scene)
+        }
+
 
         parentPanel.linkOffsetX = this._options.meshBadgeLinkXOffsetInPixels;
         parentPanel.linkOffsetY = this._options.meshBadgeLinkYOffsetInPixels;
