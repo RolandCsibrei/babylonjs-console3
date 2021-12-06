@@ -168,26 +168,6 @@ var console3 = /** @class */ (function () {
         if (property === void 0) { property = ""; }
         return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._logf(name, object, property, 1);
     };
-    console3.logf5 = function (name, object, property) {
-        var _a;
-        if (property === void 0) { property = ""; }
-        return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._logf(name, object, property, 5);
-    };
-    console3.logf30 = function (name, object, property) {
-        var _a;
-        if (property === void 0) { property = ""; }
-        return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._logf(name, object, property, 30);
-    };
-    console3.logf60 = function (name, object, property) {
-        var _a;
-        if (property === void 0) { property = ""; }
-        return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._logf(name, object, property, 60);
-    };
-    console3.logf120 = function (name, object, property) {
-        var _a;
-        if (property === void 0) { property = ""; }
-        return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._logf(name, object, property, 120);
-    };
     console3.getTicks = function () {
         var _a;
         return (_a = console3.instance) === null || _a === void 0 ? void 0 : _a._ticks;
@@ -633,7 +613,28 @@ var console3 = /** @class */ (function () {
             entity = this._addObjectEntity(name, object, property, {
                 docked: docked,
                 console: false,
-                linkedWithMesh: true
+                linkedWithMesh: true,
+                linkedWithVector: false
+            });
+        }
+        else {
+            console.warn("console3: entity", name, "already exists.");
+            entity.source = object;
+            entity.property = property;
+            entity.options.docked = docked;
+        }
+        entity.refreshRate = refreshRate;
+        return entity;
+    };
+    console3.prototype._logvf = function (name, object, property, refreshRate) {
+        var docked = false;
+        var entity = this._entities.get(name);
+        if (!entity) {
+            entity = this._addObjectEntity(name, object, property, {
+                docked: docked,
+                console: false,
+                linkedWithMesh: false,
+                linkedWithVector: true
             });
         }
         else {
@@ -777,14 +778,9 @@ var console3 = /** @class */ (function () {
             parentPanel.paddingBottomInPixels = 4;
             parentPanel.zIndex = 1;
             parentPanel.alpha = this._options.mainPanelAlpha;
-            if (entity.options.linkedWithMesh === true) {
+            if (entity.options.linkedWithMesh === true ||
+                entity.options.linkedWithVector === true) {
                 this._gui.addControl(parentPanel);
-                var mesh = entity.getLinkedMesh();
-                if (mesh) {
-                    parentPanel.linkWithMesh(mesh);
-                    entity.options.linkedWithMesh = true;
-                }
-                parentPanel.paddingTopInPixels = 0;
                 var line = new BABYLON_GUI.Line("line-" + entity.name);
                 line.lineWidth = 2;
                 line.dash = [3, 3];
@@ -793,9 +789,20 @@ var console3 = /** @class */ (function () {
                 line.zIndex = 0;
                 line.linkOffsetY = -20;
                 line.alpha = this._options.linesAlpha;
-                this._gui.addControl(line);
-                line.linkWithMesh(mesh);
                 line.connectedControl = parentPanel;
+                this._gui.addControl(line);
+                if (entity.options.linkedWithMesh === true) {
+                    var mesh = entity.getLinkedMesh();
+                    if (mesh) {
+                        parentPanel.linkWithMesh(mesh);
+                        line.linkWithMesh(mesh);
+                    }
+                }
+                if (entity.options.linkedWithVector === true) {
+                    var vector = entity.getObject();
+                    parentPanel.moveToVector3(vector, this._scene);
+                    line.moveToVector3(vector, this._scene);
+                }
                 parentPanel.linkOffsetX = this._options.meshBadgeLinkXOffsetInPixels;
                 parentPanel.linkOffsetY = this._options.meshBadgeLinkYOffsetInPixels;
             }
